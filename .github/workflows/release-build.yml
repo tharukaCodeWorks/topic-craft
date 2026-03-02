@@ -3,11 +3,14 @@ name: Build and Release
 on:
   release:
     types: [published]
+    
+permissions:
+  contents: write
 
 jobs:
   build-mac:
     name: Build macOS
-    runs-on: [self-hosted, Tharukas-Mac-mini]
+    runs-on: self-hosted
     
     steps:
       - name: Checkout Code
