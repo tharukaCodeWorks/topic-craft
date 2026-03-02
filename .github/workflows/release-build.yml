@@ -27,13 +27,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract Version
+        shell: bash
+        run: echo "APP_VERSION=${TAG_NAME#v}" >> $GITHUB_ENV
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+
       - name: Upload macOS Artifacts
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./release/build/TopicCraft-${{ github.event.release.tag_name }}-mac.zip
+          asset_path: ./release/build/TopicCraft-${{ env.APP_VERSION }}-mac.zip
           asset_name: TopicCraft-${{ github.event.release.tag_name }}-mac.zip
           asset_content_type: application/zip
 
@@ -43,7 +49,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./release/build/TopicCraft-${{ github.event.release.tag_name }}.dmg
+          asset_path: ./release/build/TopicCraft-${{ env.APP_VERSION }}.dmg
           asset_name: TopicCraft-${{ github.event.release.tag_name }}.dmg
           asset_content_type: application/x-apple-diskimage
 
@@ -69,13 +75,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract Version
+        shell: bash
+        run: echo "APP_VERSION=${TAG_NAME#v}" >> $GITHUB_ENV
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+
       - name: Upload Windows Artifacts
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./release/build/TopicCraft Setup ${{ github.event.release.tag_name }}.exe
+          asset_path: ./release/build/TopicCraft Setup ${{ env.APP_VERSION }}.exe
           asset_name: TopicCraft-Setup-${{ github.event.release.tag_name }}.exe
           asset_content_type: application/vnd.microsoft.portable-executable
 
@@ -101,12 +113,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract Version
+        shell: bash
+        run: echo "APP_VERSION=${TAG_NAME#v}" >> $GITHUB_ENV
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+
       - name: Upload Linux AppImage Artifact
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./release/build/TopicCraft-${{ github.event.release.tag_name }}.AppImage
+          asset_path: ./release/build/TopicCraft-${{ env.APP_VERSION }}.AppImage
           asset_name: TopicCraft-${{ github.event.release.tag_name }}.AppImage
           asset_content_type: application/x-executable

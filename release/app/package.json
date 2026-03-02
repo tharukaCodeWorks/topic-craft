@@ -1,12 +1,12 @@
 {
-    "name": "electron-react-boilerplate",
-    "version": "4.6.0",
-    "description": "A foundation for scalable desktop apps",
+    "name": "topic-craft",
+    "version": "1.0.0",
+    "description": "AI-Powered Learning Path Generator",
     "license": "MIT",
     "author": {
-        "name": "Electron React Boilerplate Maintainers",
-        "email": "electronreactboilerplate@gmail.com",
-        "url": "https://github.com/electron-react-boilerplate"
+        "name": "Tharuka Dissanayake",
+        "email": "tharukawapnet@gmail.com",
+        "url": "https://github.com/tharukaCodeWorks"
     },
     "main": "./dist/main/main.js",
     "scripts": {
