@@ -7,7 +7,7 @@ on:
 jobs:
   build-mac:
     name: Build macOS
-    runs-on: Tharukas-Mac-mini
+    runs-on: [self-hosted, Tharukas-Mac-mini]
     
     steps:
       - name: Checkout Code
