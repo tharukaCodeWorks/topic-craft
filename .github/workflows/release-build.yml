@@ -5,8 +5,8 @@ on:
     types: [published]
 
 jobs:
-  build:
-    name: Build macOS and Windows
+  build-mac:
+    name: Build macOS
     runs-on: Tharukas-Mac-mini
     
     steps:
@@ -24,11 +24,6 @@ jobs:
 
       - name: Build macOS Application
         run: npm run package -- --mac
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Build Windows Application
-        run: npm run package -- --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,12 +47,34 @@ jobs:
           asset_name: TopicCraft-${{ github.event.release.tag_name }}.dmg
           asset_content_type: application/x-apple-diskimage
 
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Windows Application
+        run: npm run package -- --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload Windows Artifacts
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./release/build/TopicCraft\ Setup\ ${{ github.event.release.tag_name }}.exe
+          asset_path: ./release/build/TopicCraft Setup ${{ github.event.release.tag_name }}.exe
           asset_name: TopicCraft-Setup-${{ github.event.release.tag_name }}.exe
           asset_content_type: application/vnd.microsoft.portable-executable
