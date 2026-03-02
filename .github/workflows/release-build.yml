@@ -78,3 +78,35 @@ jobs:
           asset_path: ./release/build/TopicCraft Setup ${{ github.event.release.tag_name }}.exe
           asset_name: TopicCraft-Setup-${{ github.event.release.tag_name }}.exe
           asset_content_type: application/vnd.microsoft.portable-executable
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Linux Application
+        run: npm run package -- --linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux AppImage Artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./release/build/TopicCraft-${{ github.event.release.tag_name }}.AppImage
+          asset_name: TopicCraft-${{ github.event.release.tag_name }}.AppImage
+          asset_content_type: application/x-executable
