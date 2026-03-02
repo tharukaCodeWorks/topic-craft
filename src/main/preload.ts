@@ -25,6 +25,7 @@ const electronHandler = {
   windowControls: {
     minimize: () => ipcRenderer.send('window-minimize'),
     maximize: () => ipcRenderer.send('window-maximize'),
+    openDevTools: () => ipcRenderer.send('window-open-dev-tools'),
     close: () => ipcRenderer.send('window-close'),
     savePdf: (title?: string, base64Data?: string) =>
       ipcRenderer.invoke('window-save-pdf', title, base64Data),

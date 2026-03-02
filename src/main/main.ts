@@ -58,6 +58,10 @@ ipcMain.on('window-close', () => {
   mainWindow?.close();
 });
 
+ipcMain.on('window-open-dev-tools', () => {
+  mainWindow?.webContents.openDevTools({ mode: 'detach' });
+});
+
 ipcMain.handle(
   'window-save-pdf',
   async (event, title?: string, base64Data?: string) => {
