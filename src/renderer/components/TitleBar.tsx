@@ -21,7 +21,7 @@ function TitleBar() {
     <div className="titlebar">
       <div className="titlebar-left" />
       <div className="titlebar-center">
-        <div className="titlebar-branding">TopicCraft</div>
+        <div className="titlebar-branding">Teachmeit Academy</div>
       </div>
       <div className="titlebar-controls">
         <button

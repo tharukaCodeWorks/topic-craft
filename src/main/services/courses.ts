@@ -50,7 +50,7 @@ export class CoursesService {
 
   private async fetchCurriculum(courseId: string, coursetitle: string) {
     try {
-      console.log(`Fetching curriculum for "${coursetitle}"...`);
+      console.log(`[Gemini API] Fetching curriculum for "${coursetitle}" from http://localhost:8000/gemini/learning-path...`);
       const response = await fetch(
         'http://localhost:8000/gemini/learning-path',
         {
@@ -60,11 +60,16 @@ export class CoursesService {
         },
       );
 
+      console.log(`[Gemini API] Received response for curriculum fetch. Status: ${response.status} ${response.statusText}`);
+
       if (!response.ok) {
+        console.error(`[Gemini API] API error for curriculum fetch:`, { status: response.status, statusText: response.statusText });
         throw new Error(`Gemini API error: ${response.statusText}`);
       }
 
       const data: any = await response.json();
+      console.log(`[Gemini API] Parsed response data for curriculum fetch:`, JSON.stringify(data).substring(0, 150) + '...');
+      
       const rawArray: any[] =
         data.main_subjects ??
         data.mainsubjects ??
@@ -73,7 +78,7 @@ export class CoursesService {
         [];
 
       if (!rawArray || !Array.isArray(rawArray) || rawArray.length === 0) {
-        console.warn(`Gemini returned no curriculum for "${coursetitle}".`);
+        console.warn(`[Gemini API] Warning: returned no curriculum for "${coursetitle}". Raw array was empty or invalid. Data received:`, data);
         return;
       }
 
@@ -110,7 +115,7 @@ export class CoursesService {
 
         try {
           console.log(
-            `Generating content: [${mIdx + 1}/${mainsubjects.length}] "${mainSubject.title}" > "${sub.title}"`,
+            `[Gemini API] Generating content: [${mIdx + 1}/${mainsubjects.length}] "${mainSubject.title}" > "${sub.title}" from http://localhost:8000/gemini/sub-subject-content`,
           );
           const res = await fetch(
             'http://localhost:8000/gemini/sub-subject-content',
@@ -125,9 +130,15 @@ export class CoursesService {
             },
           );
 
-          if (!res.ok) throw new Error(`Gemini API error: ${res.statusText}`);
+          console.log(`[Gemini API] Received response for content generation. Status: ${res.status} ${res.statusText}`);
+
+          if (!res.ok) {
+            console.error(`[Gemini API] API error for content generation:`, { status: res.status, statusText: res.statusText });
+            throw new Error(`Gemini API error: ${res.statusText}`);
+          }
 
           const data: any = await res.json();
+          console.log(`[Gemini API] Parsed response data for content:`, typeof data === 'object' ? JSON.stringify(data).substring(0, 150) + '...' : String(data).substring(0, 150));
           if (data?.success && data?.content) {
             const fresh = getCourseById(courseId);
             if (
@@ -163,7 +174,7 @@ export class CoursesService {
 
     setImmediate(async () => {
       try {
-        console.log(`Regenerating: "${mainSubject.title}" > "${sub.title}"`);
+        console.log(`[Gemini API] Regenerating: "${mainSubject.title}" > "${sub.title}" from http://localhost:8000/gemini/sub-subject-content`);
         const res = await fetch(
           'http://localhost:8000/gemini/sub-subject-content',
           {
@@ -177,8 +188,15 @@ export class CoursesService {
           },
         );
 
-        if (!res.ok) throw new Error(`API error: ${res.statusText}`);
+        console.log(`[Gemini API] Received response for regeneration. Status: ${res.status} ${res.statusText}`);
+
+        if (!res.ok) {
+          console.error(`[Gemini API] API error for regeneration:`, { status: res.status, statusText: res.statusText });
+          throw new Error(`API error: ${res.statusText}`);
+        }
+        
         const data: any = await res.json();
+        console.log(`[Gemini API] Parsed response data for regeneration:`, typeof data === 'object' ? JSON.stringify(data).substring(0, 150) + '...' : String(data).substring(0, 150));
 
         if (data?.success && data?.content) {
           const fresh = getCourseById(courseId);
