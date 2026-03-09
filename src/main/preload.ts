@@ -48,6 +48,17 @@ const electronHandler = {
         mainIdx,
         subIdx,
       ),
+    addComment: (
+      courseId: string,
+      mainIdx: number,
+      subIdx: number,
+      text: string,
+    ) =>
+      ipcRenderer.invoke('courses:addComment', courseId, mainIdx, subIdx, text),
+    addMainSubject: (courseId: string, title: string) =>
+      ipcRenderer.invoke('courses:addMainSubject', courseId, title),
+    addSubSubject: (courseId: string, mainIdx: number, title: string) =>
+      ipcRenderer.invoke('courses:addSubSubject', courseId, mainIdx, title),
   },
   cli: {
     checkNode: () => ipcRenderer.invoke('cli:checkNode'),

@@ -10,7 +10,7 @@ const execAsync = promisify(exec);
  * Robustly resolve the system PATH for GUI applications on macOS/Linux.
  * Also includes common global npm paths on Windows.
  */
-async function getResolvedEnv(): Promise<NodeJS.ProcessEnv> {
+export async function getResolvedEnv(): Promise<NodeJS.ProcessEnv> {
   const env = { ...process.env };
   const paths = new Set<string>(env.PATH ? env.PATH.split(path.delimiter) : []);
 

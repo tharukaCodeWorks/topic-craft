@@ -2,9 +2,17 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
+export interface Comment {
+  id: string;
+  text: string;
+  author: 'user' | 'ai';
+  timestamp: number;
+}
+
 export interface SubSubject {
   title: string;
   content?: string;
+  comments?: Comment[];
 }
 
 export interface MainSubject {

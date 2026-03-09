@@ -112,6 +112,17 @@ ipcMain.handle(
   (_event, courseId, mainIdx, subIdx) =>
     coursesService.regenerateSubSubjectContent(courseId, mainIdx, subIdx),
 );
+ipcMain.handle(
+  'courses:addComment',
+  (_event, courseId, mainIdx, subIdx, text) =>
+    coursesService.addComment(courseId, mainIdx, subIdx, text),
+);
+ipcMain.handle('courses:addMainSubject', (_event, courseId, title) =>
+  coursesService.addMainSubject(courseId, title),
+);
+ipcMain.handle('courses:addSubSubject', (_event, courseId, mainIdx, title) =>
+  coursesService.addSubSubject(courseId, mainIdx, title),
+);
 
 ipcMain.handle('cli:checkNode', () => cliService.checkNodeInstallation());
 ipcMain.handle('cli:checkInstallation', () => cliService.checkInstallation());

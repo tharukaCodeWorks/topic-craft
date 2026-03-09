@@ -1,9 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, Navigate } from 'react-router-dom';
+import CustomModal from '../components/CustomModal';
 
+interface Comment {
+  id: string;
+  text: string;
+  author: 'user' | 'ai';
+  timestamp: number;
+}
 interface SubSubject {
   title: string;
   content?: string;
+  comments?: Comment[];
 }
 interface MainSubject {
   title: string;
@@ -16,26 +24,155 @@ interface Course {
 }
 
 function MarkdownRenderer({ content }: { content: string }) {
-  const html = content
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    .replace(/^---$/gm, '<hr/>')
-    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-    .replace(/^\* (.+)$/gm, '<li>$1</li>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/^(?!<[hblp])(.+)$/gm, (m) =>
-      m.startsWith('<') ? m : `<p>${m}</p>`,
-    );
+  const [Markdown, setMarkdown] = useState<{
+    ReactMarkdown: any;
+    remarkGfm: any;
+  } | null>(null);
 
-  // eslint-disable-next-line react/no-danger
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([import('react-markdown'), import('remark-gfm')]).then(
+      ([md, gfm]) => {
+        if (isMounted) {
+          setMarkdown({ ReactMarkdown: md.default, remarkGfm: gfm.default });
+        }
+      },
+    );
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (!Markdown) {
+    return (
+      <div className="ss-markdown">
+        <div
+          style={{
+            whiteSpace: 'pre-wrap',
+            fontFamily: 'inherit',
+            fontSize: 'inherit',
+            lineHeight: 'inherit',
+            color: 'inherit',
+          }}
+        >
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  const { ReactMarkdown, remarkGfm } = Markdown;
+
+  return (
+    <div className="ss-markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ node, ...props }: any) => <h1 {...props} />,
+          h2: ({ node, ...props }: any) => <h2 {...props} />,
+          h3: ({ node, ...props }: any) => <h3 {...props} />,
+          ul: ({ node, ...props }: any) => <ul {...props} />,
+          ol: ({ node, ...props }: any) => <ol {...props} />,
+          li: ({ node, ...props }: any) => <li {...props} />,
+          pre: ({ node, ...props }: any) => <pre {...props} />,
+          code: ({ node, inline, ...props }: any) =>
+            inline ? <code {...props} /> : <code {...props} />,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function CommentSection({
+  courseId,
+  mainIdx,
+  subIdx,
+  comments,
+  onCommentAdded,
+  isOpen,
+  onClose,
+}: {
+  courseId: string;
+  mainIdx: number;
+  subIdx: number;
+  comments: Comment[];
+  onCommentAdded: () => void;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!text.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await window.electron.courses.addComment(
+        courseId,
+        mainIdx,
+        subIdx,
+        text.trim(),
+      );
+      setText('');
+      onCommentAdded();
+    } catch (err) {
+      console.error('Failed to add comment:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className={`ss-comment-drawer ${isOpen ? 'open' : ''}`}>
+      <div className="ss-comment-drawer-header">
+        <h3>Questions & Comments</h3>
+        <button type="button" className="ss-drawer-close" onClick={onClose}>
+          ✕
+        </button>
+      </div>
+      <div className="ss-comment-list">
+        {comments.map((c) => (
+          <div key={c.id} className={`ss-comment-item ${c.author}`}>
+            <div className="ss-comment-header">
+              <span className="ss-comment-author">
+                {c.author === 'user' ? 'You' : 'AI Tutor'}
+              </span>
+              <span className="ss-comment-time">
+                {new Date(c.timestamp).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            </div>
+            <div className="ss-comment-body">
+              {c.author === 'ai' ? (
+                <MarkdownRenderer content={c.text} />
+              ) : (
+                <p>{c.text}</p>
+              )}
+            </div>
+          </div>
+        ))}
+        {comments.length === 0 && (
+          <p className="ss-no-comments">No comments yet. Ask a question!</p>
+        )}
+      </div>
+      <form className="ss-comment-form" onSubmit={handleSubmit}>
+        <textarea
+          placeholder="Ask a question about this topic..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={submitting}
+        />
+        <button type="submit" disabled={submitting || !text.trim()}>
+          {submitting ? 'Sending...' : 'Send'}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 export default function SubSubjectContentPage() {
@@ -54,6 +191,12 @@ export default function SubSubjectContentPage() {
     {},
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [regenModalOpen, setRegenModalOpen] = useState(false);
+  const [addingMain, setAddingMain] = useState(false);
+  const [newMainTitle, setNewMainTitle] = useState('');
+  const [addingSubToIdx, setAddingSubToIdx] = useState<number | null>(null);
+  const [newSubTitle, setNewSubTitle] = useState('');
 
   const mIdx = parseInt(mainIdx ?? '0', 10);
   const sIdx = parseInt(subIdx ?? '0', 10);
@@ -84,8 +227,15 @@ export default function SubSubjectContentPage() {
     setExpandedTopics((prev) => ({ ...prev, [mIdx]: true }));
   }, [mIdx]);
 
-  const handleRegen = async () => {
+  const handleRegen = () => {
     if (!id || regenerating || !course) return;
+    setRegenModalOpen(true);
+  };
+
+  const confirmRegen = async () => {
+    if (!id) return;
+    setRegenModalOpen(false);
+
     setRegenerating(true);
     setRegenMsg('Regeneration started — content will appear shortly.');
     try {
@@ -101,6 +251,30 @@ export default function SubSubjectContentPage() {
 
   const toggleTopic = (idx: number) => {
     setExpandedTopics((prev) => ({ ...prev, [idx]: !prev[idx] }));
+  };
+
+  const handleAddMainSubject = async () => {
+    if (!id || !newMainTitle.trim()) return;
+    try {
+      await window.electron.courses.addMainSubject(id, newMainTitle.trim());
+      setNewMainTitle('');
+      setAddingMain(false);
+      fetchCourse();
+    } catch (err) {
+      console.error('Failed to add main subject:', err);
+    }
+  };
+
+  const handleAddSubSubject = async (mIdx: number) => {
+    if (!id || !newSubTitle.trim()) return;
+    try {
+      await window.electron.courses.addSubSubject(id, mIdx, newSubTitle.trim());
+      setNewSubTitle('');
+      setAddingSubToIdx(null);
+      fetchCourse();
+    } catch (err) {
+      console.error('Failed to add sub subject:', err);
+    }
   };
 
   if (loading && !course)
@@ -134,18 +308,83 @@ export default function SubSubjectContentPage() {
       </div>
     );
 
-  if (!mainSubject || !subSubject)
+  if (!mainSubject || !subSubject) {
+    if (course.mainsubjects && course.mainsubjects.length > 0) {
+      const firstMain = course.mainsubjects[0];
+      if (firstMain.subsubjects && firstMain.subsubjects.length > 0) {
+        return <Navigate to={`/courses/${id}/content/0/0`} replace />;
+      }
+    }
+
     return (
-      <div style={{ textAlign: 'center', padding: 60, color: '#6b7280' }}>
-        <p>Topic not found.</p>
-        <Link
-          to={`/courses/${id}`}
-          style={{ color: '#6366f1', textDecoration: 'none', fontWeight: 500 }}
-        >
-          ← Back to Course
-        </Link>
+      <div className="ss-layout">
+        <aside className="ss-sidebar">
+          <div className="ss-sidebar-header">
+            <Link to="/courses" className="ss-course-link">
+              <span className="ss-course-icon">←</span>
+              <span className="ss-course-title">Back to Courses</span>
+            </Link>
+          </div>
+          <div className="ss-nav-tree">
+            {addingMain ? (
+              <div className="ss-sidebar-add-form">
+                <input
+                  type="text"
+                  className="ss-sidebar-input"
+                  placeholder="Subject title..."
+                  value={newMainTitle}
+                  onChange={(e) => setNewMainTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddMainSubject()}
+                  autoFocus
+                />
+                <button onClick={handleAddMainSubject}>Add</button>
+                <button onClick={() => setAddingMain(false)}>Cancel</button>
+              </div>
+            ) : (
+              <button
+                className="ss-sidebar-add-btn"
+                onClick={() => setAddingMain(true)}
+              >
+                + New Subject
+              </button>
+            )}
+          </div>
+        </aside>
+        <main className="ss-main">
+          <div className="ss-empty-state">
+            <div className="ss-empty-icon">📚</div>
+            <h2>No subjects yet</h2>
+            <p>Start by adding a main subject to your curriculum.</p>
+            {!addingMain && (
+              <button
+                className="ss-empty-add-btn"
+                onClick={() => setAddingMain(true)}
+              >
+                + Add Main Subject
+              </button>
+            )}
+            {addingMain && (
+              <div className="ss-empty-form">
+                <input
+                  type="text"
+                  className="ss-empty-input"
+                  placeholder="e.g. Introduction to React"
+                  value={newMainTitle}
+                  onChange={(e) => setNewMainTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddMainSubject()}
+                  autoFocus
+                />
+                <div className="ss-empty-actions">
+                  <button onClick={handleAddMainSubject}>Create Subject</button>
+                  <button onClick={() => setAddingMain(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
       </div>
     );
+  }
 
   let prev: null | { mIdx: number; sIdx: number; title: string } = null;
   if (sIdx > 0) {
@@ -202,7 +441,7 @@ export default function SubSubjectContentPage() {
       <aside className={`ss-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="ss-sidebar-header">
           <div className="ss-sidebar-header-top">
-            <Link to={`/courses/${id}`} className="ss-course-link">
+            <div className="ss-course-link">
               <span className="ss-course-icon">
                 <svg
                   width="18"
@@ -218,7 +457,7 @@ export default function SubSubjectContentPage() {
                 </svg>
               </span>
               <span className="ss-course-title">{course.coursetitle}</span>
-            </Link>
+            </div>
             <button
               type="button"
               className="ss-mobile-close"
@@ -272,36 +511,95 @@ export default function SubSubjectContentPage() {
                 </button>
 
                 {isExpanded && (
-                  <ul className="ss-nav-subs">
-                    {subject.subsubjects.map((sub, sI) => {
-                      const isActive = mI === mIdx && sI === sIdx;
-                      const hasContent = !!sub.content;
-                      return (
-                        <li key={sub.title}>
-                          <Link
-                            to={`/courses/${id}/content/${mI}/${sI}`}
-                            onClick={() => setMobileMenuOpen(false)}
-                            className={`ss-nav-sub-link ${isActive ? 'active' : ''} ${hasContent ? 'done' : 'pending'}`}
-                          >
-                            <span className="ss-nav-sub-status">
-                              {hasContent ? (
-                                <span className="ss-check">✓</span>
-                              ) : (
-                                <span className="ss-dot" />
-                              )}
-                            </span>
-                            <span className="ss-nav-sub-title">
-                              {sub.title}
-                            </span>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <>
+                    <ul className="ss-nav-subs">
+                      {subject.subsubjects.map((sub, sI) => {
+                        const isActive = mI === mIdx && sI === sIdx;
+                        const hasContent = !!sub.content;
+                        return (
+                          <li key={sub.title}>
+                            <Link
+                              to={`/courses/${id}/content/${mI}/${sI}`}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={`ss-nav-sub-link ${isActive ? 'active' : ''} ${hasContent ? 'done' : 'pending'}`}
+                            >
+                              <span className="ss-nav-sub-status">
+                                {hasContent ? (
+                                  <span className="ss-check">✓</span>
+                                ) : (
+                                  <span className="ss-dot" />
+                                )}
+                              </span>
+                              <span className="ss-nav-sub-title">
+                                {sub.title}
+                              </span>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {addingSubToIdx === mI ? (
+                      <div className="ss-sidebar-add-form mini">
+                        <input
+                          type="text"
+                          className="ss-sidebar-input"
+                          placeholder="Sub title..."
+                          value={newSubTitle}
+                          onChange={(e) => setNewSubTitle(e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === 'Enter' && handleAddSubSubject(mI)
+                          }
+                          autoFocus
+                        />
+                        <div className="ss-sidebar-add-actions">
+                          <button onClick={() => handleAddSubSubject(mI)}>
+                            Add
+                          </button>
+                          <button onClick={() => setAddingSubToIdx(null)}>
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="ss-sidebar-sub-add-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAddingSubToIdx(mI);
+                        }}
+                      >
+                        + Add Sub Subject
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             );
           })}
+          {addingMain ? (
+            <div className="ss-sidebar-add-form">
+              <input
+                type="text"
+                className="ss-sidebar-input"
+                placeholder="Subject title..."
+                value={newMainTitle}
+                onChange={(e) => setNewMainTitle(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddMainSubject()}
+                autoFocus
+              />
+              <div className="ss-sidebar-add-actions">
+                <button onClick={handleAddMainSubject}>Add</button>
+                <button onClick={() => setAddingMain(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="ss-sidebar-add-btn"
+              onClick={() => setAddingMain(true)}
+            >
+              + New Subject
+            </button>
+          )}
         </nav>
       </aside>
 
@@ -336,6 +634,30 @@ export default function SubSubjectContentPage() {
                 title="Regenerate content for this topic"
               >
                 {regenerating ? <span className="ss-regen-spinner" /> : '↻'}
+              </button>
+              <button
+                type="button"
+                className={`ss-comments-toggle-btn ${commentsOpen ? 'active' : ''}`}
+                onClick={() => setCommentsOpen(!commentsOpen)}
+                title="Toggle Comments"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                {subSubject.comments && subSubject.comments.length > 0 && (
+                  <span className="ss-comment-badge">
+                    {subSubject.comments.length}
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -389,14 +711,24 @@ export default function SubSubjectContentPage() {
                 <span className="ss-nav-label">{next.title}</span>
               </Link>
             ) : (
-              <Link to={`/courses/${id}`} className="ss-nav-btn ss-nav-next">
+              <Link to="/courses" className="ss-nav-btn ss-nav-next">
                 <span className="ss-nav-dir">Finish →</span>
-                <span className="ss-nav-label">Back to Course</span>
+                <span className="ss-nav-label">Back to Courses</span>
               </Link>
             )}
           </div>
         </div>
       </main>
+
+      <CommentSection
+        courseId={id!}
+        mainIdx={mIdx}
+        subIdx={sIdx}
+        comments={subSubject.comments || []}
+        onCommentAdded={fetchCourse}
+        isOpen={commentsOpen}
+        onClose={() => setCommentsOpen(false)}
+      />
 
       <style>{`
                 /* Layout */
@@ -421,6 +753,7 @@ export default function SubSubjectContentPage() {
                     flex-direction: column;
                     height: 100%;
                     overflow: hidden;
+                    overflow-x: hidden;
                     z-index: 50;
                     transition: transform 0.3s ease;
                 }
@@ -434,7 +767,7 @@ export default function SubSubjectContentPage() {
                     justify-content: center;
                 }
                 .ss-sidebar-header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-                .ss-mobile-close { display: none; background: none; border: none; font-size: 1.2rem; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 6px; }
+                .ss-mobile-close { display: none; background: none; border: none !important; font-size: 1.2rem; color: #94a3b8; cursor: pointer; padding: 4px !important; border-radius: 6px; box-shadow: none !important; }
                 
                 .ss-mobile-overlay {
                     display: none;
@@ -459,7 +792,7 @@ export default function SubSubjectContentPage() {
                 }
                 .ss-course-link:hover { color: var(--primary); }
                 .ss-course-icon { font-size: 1.1rem; flex-shrink: 0; }
-                .ss-course-title { flex: 1; }
+                .ss-course-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .ss-sidebar-progress {
                     display: flex;
                     align-items: center;
@@ -489,6 +822,7 @@ export default function SubSubjectContentPage() {
                 .ss-nav-tree {
                     flex: 1;
                     overflow-y: auto;
+                    overflow-x: hidden;
                     padding: 8px 0 24px;
                 }
                 .ss-nav-tree::-webkit-scrollbar { width: 4px; }
@@ -509,6 +843,7 @@ export default function SubSubjectContentPage() {
                     font-size: 0.8rem;
                     font-weight: 600;
                     transition: background 0.12s, color 0.12s;
+                    box-sizing: border-box;
                 }
                 .ss-nav-topic-btn:hover { 
                     background: rgba(16, 185, 129, 0.1); 
@@ -523,10 +858,10 @@ export default function SubSubjectContentPage() {
                     line-height: 1;
                 }
                 .ss-nav-chevron.expanded { transform: rotate(90deg); }
-                .ss-nav-topic-title { flex: 1; line-height: 1.3; }
+                .ss-nav-topic-title { flex: 1; min-width: 0; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .ss-nav-topic-count {
                     font-size: 0.68rem;
-                    color: inherit; /* inherit the normal or hovered text color */
+                    color: inherit;
                     font-weight: 500;
                     background: rgba(255, 255, 255, 0.05);
                     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -534,6 +869,7 @@ export default function SubSubjectContentPage() {
                     border-radius: 10px;
                     flex-shrink: 0;
                     transition: background 0.12s, border-color 0.12s;
+                    margin-left: 4px;
                 }
                 .ss-nav-topic-btn:hover .ss-nav-topic-count {
                     background: rgba(16, 185, 129, 0.2);
@@ -549,12 +885,14 @@ export default function SubSubjectContentPage() {
                     display: flex;
                     align-items: flex-start;
                     gap: 8px;
+                    width: 100%;
                     padding: 7px 16px 7px 28px;
                     text-decoration: none;
                     font-size: 0.78rem;
                     color: #94a3b8;
                     transition: background 0.12s, color 0.12s;
                     line-height: 1.4;
+                    box-sizing: border-box;
                 }
                 .ss-nav-sub-link:hover { background: var(--hover-bg); color: var(--text); }
                 .ss-nav-sub-link.active {
@@ -575,7 +913,7 @@ export default function SubSubjectContentPage() {
                 }
                 .ss-nav-sub-link.active .ss-dot { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
                 @keyframes pulse { 0%,100% { opacity:1;transform:scale(1); } 50% { opacity:0.5;transform:scale(0.7); } }
-                .ss-nav-sub-title { flex: 1; }
+                .ss-nav-sub-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
                 /* MAIN CONTENT */
                 .ss-main {
@@ -655,6 +993,72 @@ export default function SubSubjectContentPage() {
                     transition: all 0.2s ease;
                 }
                 .ss-mobile-toggle:hover { background: rgba(16, 185, 129, 0.15); border-color: var(--primary); }
+
+                /* Management Styles */
+                .ss-sidebar-add-btn {
+                    width: auto; margin: 12px 16px; padding: 10px;
+                    border: 1px dashed var(--border); border-radius: 8px;
+                    background: none; color: #94a3b8; font-size: 0.75rem;
+                    font-weight: 600; cursor: pointer; transition: all 0.2s;
+                    box-sizing: border-box;
+                }
+                .ss-sidebar-add-btn:hover { border-color: var(--primary); color: var(--primary); background: rgba(16, 185, 129, 0.05); }
+
+                .ss-sidebar-sub-add-btn {
+                    width: auto; margin: 4px 16px 12px 28px; padding: 6px;
+                    border: 1px dashed var(--border); border-radius: 6px;
+                    background: none; color: #64748b; font-size: 0.7rem;
+                    font-weight: 500; cursor: pointer; transition: all 0.2s;
+                    text-align: left; box-sizing: border-box;
+                }
+                .ss-sidebar-sub-add-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+                .ss-sidebar-add-form { padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
+                .ss-sidebar-add-form.mini { padding: 4px 16px 12px 28px; }
+                
+                .ss-sidebar-input {
+                    width: 100%; padding: 8px 12px; border-radius: 6px;
+                    border: 1px solid var(--border); background: var(--bg);
+                    color: var(--text); font-size: 0.75rem; outline: none;
+                    box-sizing: border-box;
+                }
+                .ss-sidebar-input:focus { border-color: var(--primary); }
+
+                .ss-sidebar-add-actions { display: flex; gap: 8px; width: 100%; box-sizing: border-box; }
+                .ss-sidebar-add-actions button {
+                    flex: 1; padding: 6px; border-radius: 4px; border: 1px solid var(--border);
+                    background: none; color: #94a3b8; font-size: 0.7rem; font-weight: 600; cursor: pointer;
+                    box-sizing: border-box;
+                }
+                .ss-sidebar-add-actions button:first-child { background: var(--primary); color: white; border: none; }
+
+                /* Empty State */
+                .ss-empty-state {
+                    flex: 1; display: flex; flex-direction: column; align-items: center;
+                    justify-content: center; padding: 40px; text-align: center;
+                }
+                .ss-empty-icon { font-size: 4rem; margin-bottom: 20px; }
+                .ss-empty-state h2 { color: var(--text); margin-bottom: 8px; }
+                .ss-empty-state p { color: #64748b; margin-bottom: 32px; }
+                
+                .ss-empty-add-btn {
+                    padding: 12px 24px; border-radius: 12px; background: var(--primary);
+                    color: white; border: none; font-weight: 600; cursor: pointer;
+                    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+                }
+                
+                .ss-empty-form { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }
+                .ss-empty-input {
+                    width: 100%; padding: 14px 20px; border-radius: 12px;
+                    border: 1px solid var(--border); background: var(--surface);
+                    color: var(--text); font-size: 1rem; outline: none;
+                }
+                .ss-empty-actions { display: flex; gap: 12px; }
+                .ss-empty-actions button {
+                    flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--border);
+                    background: none; color: #94a3b8; font-weight: 600; cursor: pointer;
+                }
+                .ss-empty-actions button:first-child { background: var(--primary); color: white; border: none; }
                 
                 .ss-header-actions { display:flex;align-items:center;gap:12px;flex-shrink:0; }
                 
@@ -670,15 +1074,17 @@ export default function SubSubjectContentPage() {
                 
                 .ss-regen-icon-btn {
                     display:inline-flex;align-items:center;justify-content:center;
-                    width: 36px; height: 36px; border-radius: 50%;
+                    width: 36px; height: 36px; border-radius: 50% !important;
                     border:1px solid rgba(255,255,255,0.1);
-                    background: rgba(255, 255, 255, 0.03); color:var(--text);font-size:1.2rem;
+                    background: rgba(255, 255, 255, 0.03); color:var(--text) !important; font-size:1.2rem;
                     cursor:pointer;transition:all 0.2s ease;
                     backdrop-filter: blur(4px); flex-shrink: 0;
-                    padding: 0;
+                    padding: 0 !important;
+                    box-shadow: none !important;
+                    appearance: none !important;
                 }
-                .ss-regen-icon-btn:hover:not(:disabled) { background:rgba(255, 255, 255, 0.08);border-color:rgba(255,255,255,0.2); }
-                .ss-regen-icon-btn:active:not(:disabled) { transform: scale(0.95); }
+                .ss-regen-icon-btn:hover:not(:disabled) { background:rgba(255, 255, 255, 0.08);border-color:rgba(255,255,255,0.2); transform: none !important; }
+                .ss-regen-icon-btn:active:not(:disabled) { transform: scale(0.95) !important; }
                 .ss-regen-icon-btn:disabled { opacity:0.5;cursor:not-allowed; }
 
                 .ss-regen-spinner {
@@ -749,8 +1155,8 @@ export default function SubSubjectContentPage() {
                 .ss-markdown h2 { font-size:1.2rem;padding-bottom:6px;border-bottom:1px solid var(--border); }
                 .ss-markdown h3 { font-size:1rem; }
                 .ss-markdown p { margin:0.75em 0; }
-                .ss-markdown ul,.ss-markdown ol { padding-left:1.5rem;margin:0.75em 0; }
-                .ss-markdown li { margin-bottom:4px; }
+                .ss-markdown ul,.ss-markdown ol { padding-left:1.5rem;margin:0.75em 0; list-style: initial; }
+                .ss-markdown li { margin-bottom:4px; display: list-item; }
                 .ss-markdown code {
                     background:var(--hover-bg);border-radius:4px;
                     padding:2px 6px;font-size:0.875em;color:var(--accent);font-family:monospace;
@@ -760,7 +1166,7 @@ export default function SubSubjectContentPage() {
                     padding:20px;overflow-x:auto;margin:1em 0;
                     border: 1px solid var(--border);
                 }
-                .ss-markdown pre code { background:none;color:inherit;padding:0;font-size:0.875rem; }
+                .ss-markdown pre code { background:none;color:inherit;padding:0;font-size:0.875rem; display: block; }
                 .ss-markdown strong { color:#f8fafc; }
                 .ss-markdown blockquote {
                     border-left:4px solid var(--primary);padding:12px 16px;margin:1em 0;
@@ -792,8 +1198,10 @@ export default function SubSubjectContentPage() {
                         top: 64px;
                         left: 0;
                         bottom: 0;
+                        width: 280px;
                         transform: translateX(-100%);
                         box-shadow: 4px 0 16px rgba(0,0,0,0.1);
+                        overflow-x: hidden;
                     }
                     .ss-sidebar.mobile-open { transform: translateX(0); }
                     .ss-mobile-toggle, .ss-mobile-close { display: flex; }
@@ -803,7 +1211,136 @@ export default function SubSubjectContentPage() {
                     .ss-scroll-content { padding: 16px 16px 20px; min-width: 100vw; }
                     .ss-bottom-nav { flex-direction: column; }
                 }
+
+                /* COMMENT DRAWER */
+                .ss-comment-drawer {
+                    position: fixed;
+                    top: 38px;
+                    right: 0;
+                    bottom: 0;
+                    width: 400px;
+                    height: calc(100vh - 38px);
+                    background: var(--surface);
+                    border-left: 1px solid var(--border);
+                    box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+                    z-index: 900;
+                    display: flex;
+                    flex-direction: column;
+                    transform: translateX(100%);
+                    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    backdrop-filter: blur(20px);
+                    -webkit-backdrop-filter: blur(20px);
+                }
+                .ss-comment-drawer.open { transform: translateX(0); }
+                .ss-comment-drawer-header {
+                    padding: 24px;
+                    border-bottom: 1px solid var(--border);
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .ss-comment-drawer-header h3 { font-size: 1.1rem; font-weight: 700; color: var(--text); margin: 0; }
+                .ss-drawer-close { background: none; border: none !important; font-size: 1.2rem; color: #94a3b8; cursor: pointer; padding: 4px !important; border-radius: 6px; box-shadow: none !important; }
+                .ss-drawer-close:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+
+                .ss-comment-list { flex: 1; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding: 24px; }
+                .ss-comment-list::-webkit-scrollbar { width: 4px; }
+                .ss-comment-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+                
+                .ss-comment-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-radius: 12px; max-width: 90%; }
+                .ss-comment-item.user { align-self: flex-end; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); }
+                .ss-comment-item.ai { align-self: flex-start; background: rgba(30, 41, 59, 0.5); border: 1px solid var(--border); }
+                
+                .ss-comment-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+                .ss-comment-author { font-size: 0.75rem; font-weight: 700; color: var(--primary); }
+                .ss-comment-item.ai .ss-comment-author { color: var(--accent); }
+                .ss-comment-time { font-size: 0.65rem; color: #64748b; }
+                
+                .ss-comment-body { font-size: 0.875rem; color: #cbd5e1; line-height: 1.5; }
+                .ss-comment-body p { margin: 0; }
+                .ss-comment-body .ss-markdown { padding: 0; font-size: 0.875rem; line-height: 1.5; background: none; }
+                
+                .ss-no-comments { font-size: 0.85rem; color: #64748b; text-align: center; margin: 20px 0; font-style: italic; }
+                
+                .ss-comment-form { display: flex; flex-direction: column; gap: 12px; padding: 24px; border-top: 1px solid var(--border); background: rgba(15, 23, 42, 0.3); }
+                .ss-comment-form textarea {
+                    background: rgba(15, 23, 42, 0.6);
+                    border: 1px solid var(--border);
+                    border-radius: 10px;
+                    padding: 12px;
+                    color: var(--text);
+                    font-size: 0.875rem;
+                    resize: none;
+                    min-height: 100px;
+                    font-family: inherit;
+                    transition: border-color 0.2s;
+                }
+                .ss-comment-form textarea:focus { outline: none; border-color: var(--primary); }
+                .ss-comment-form button {
+                    align-self: flex-end;
+                    padding: 10px 24px;
+                    background: var(--primary);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 0.875rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: transform 0.2s, opacity 0.2s;
+                }
+                .ss-comment-form button:hover:not(:disabled) { transform: translateY(-1px); opacity: 0.9; }
+                .ss-comment-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+                .ss-comments-toggle-btn {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50% !important;
+                    border: 1px solid rgba(255,255,255,0.15);
+                    background: rgba(255, 255, 255, 0.05);
+                    color: #94a3b8 !important;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    position: relative;
+                    padding: 0 !important;
+                    box-shadow: none !important;
+                    appearance: none !important;
+                }
+                .ss-comments-toggle-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.3); color: var(--text) !important; transform: none !important; }
+                .ss-comments-toggle-btn.active { color: var(--primary) !important; border-color: var(--primary); background: rgba(16, 185, 129, 0.15); }
+                .ss-comment-badge {
+                    position: absolute;
+                    top: -5px;
+                    right: -5px;
+                    background: var(--primary);
+                    color: white;
+                    font-size: 0.65rem;
+                    font-weight: 700;
+                    min-width: 16px;
+                    height: 16px;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 0 4px;
+                    border: 2px solid var(--surface);
+                }
+
+                @media (max-width: 768px) {
+                    .ss-comment-drawer { width: 100%; top: 64px; }
+                }
             `}</style>
+      <CustomModal
+        isOpen={regenModalOpen}
+        onClose={() => setRegenModalOpen(false)}
+        onConfirm={confirmRegen}
+        title="Regenerate Content"
+        message="Are you sure you want to regenerate this content? Existing content will be replaced and cannot be undone."
+        confirmLabel="Regenerate"
+        isDanger
+      />
     </div>
   );
 }

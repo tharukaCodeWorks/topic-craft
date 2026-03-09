@@ -186,11 +186,7 @@ const CoursesPage: React.FC = () => {
               return (
                 <Link
                   key={course.id}
-                  to={
-                    hasContent
-                      ? `/courses/${course.id}/content/0/0`
-                      : `/courses/${course.id}`
-                  }
+                  to={`/courses/${course.id}/content`}
                   className="course-card"
                 >
                   <div className="course-card-icon">
@@ -626,133 +622,41 @@ const CoursesPage: React.FC = () => {
         }
         .btn-confirm-no:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
 
-        /* Modal */
-        .modal-backdrop {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.4);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: modalFadeIn 0.3s ease;
-        }
-        @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        
-        .modal {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 40px;
-            width: 100%;
-            max-width: 440px;
-            box-shadow: 0 32px 64px -12px rgba(0,0,0,0.5);
-            animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-            position: relative;
-        }
-        @keyframes modalSlideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        .modal-header {
-            margin-bottom: 24px;
+        .create-error {
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 8px;
             text-align: center;
         }
-        .modal-header h2 {
-            font-size: 1.5rem;
-            font-weight: 800;
-            letter-spacing: -0.025em;
-            color: var(--text);
-            margin: 0 0 8px;
-        }
-        .modal-desc {
-            font-size: 0.9rem;
-            color: #94a3b8;
-            line-height: 1.6;
-            margin: 0;
-        }
-        
+
         .form-group {
             margin-bottom: 24px;
+            text-align: left;
         }
         .form-group label {
             display: block;
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #64748b;
-            margin-bottom: 10px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            margin-left: 4px;
         }
         .form-input {
             width: 100%;
-            padding: 14px 18px;
-            background: rgba(255, 255, 255, 0.03);
+            padding: 14px 16px;
+            background: rgba(15, 23, 42, 0.6);
             border: 1px solid var(--border);
-            border-radius: 14px;
-            font-size: 1rem;
+            border-radius: 12px;
             color: var(--text);
+            font-size: 1rem;
             transition: all 0.2s ease;
             box-sizing: border-box;
         }
         .form-input:focus {
             outline: none;
             border-color: var(--primary);
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(15, 23, 42, 0.8);
             box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
-        }
-        .form-input::placeholder {
-            color: #475569;
-        }
-
-        .modal-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 32px;
-        }
-        .btn-cancel, .btn-submit {
-            padding: 14px;
-            border-radius: 14px;
-            font-size: 0.95rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            border: 1px solid transparent;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-        .btn-cancel {
-            background: transparent;
-            border-color: var(--border);
-            color: #94a3b8;
-        }
-        .btn-cancel:hover:not(:disabled) {
-            background: rgba(255, 255, 255, 0.05);
-            color: var(--text);
-        }
-        .btn-submit {
-            background: var(--primary);
-            color: #ffffff;
-            box-shadow: 0 8px 20px -4px rgba(16, 185, 129, 0.3);
-        }
-        .btn-submit:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 24px -2px rgba(16, 185, 129, 0.4);
-            filter: brightness(1.1);
-        }
-        .btn-submit:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-        .create-error {
-            color: #ef4444;
-            font-size: 0.85rem;
-            margin-top: 8px;
-            text-align: center;
         }
     `}</style>
     </div>

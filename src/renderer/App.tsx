@@ -6,7 +6,6 @@ import {
 } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
 import CoursesPage from './pages/CoursesPage';
-import CourseDetailsPage from './pages/CourseDetailsPage';
 import SubSubjectContentPage from './pages/SubSubjectContentPage';
 import SettingsPage from './pages/SettingsPage';
 import './App.css';
@@ -18,7 +17,10 @@ export default function App() {
         <Route element={<AppLayout />}>
           <Route path="/" element={<Navigate to="/courses" replace />} />
           <Route path="/courses" element={<CoursesPage />} />
-          <Route path="/courses/:id" element={<CourseDetailsPage />} />
+          <Route
+            path="/courses/:id/content"
+            element={<SubSubjectContentPage />}
+          />
           <Route
             path="/courses/:id/content/:mainIdx/:subIdx"
             element={<SubSubjectContentPage />}

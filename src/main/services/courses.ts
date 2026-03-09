@@ -1,4 +1,9 @@
 import crypto from 'crypto';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import path from 'path';
+import os from 'os';
+import { getResolvedEnv } from './cli';
 import {
   readCourses,
   writeCourses,
@@ -7,12 +12,10 @@ import {
   Course,
   MainSubject,
   SubSubject,
+  Comment,
 } from '../store';
 
-const GEMINI_HEADERS = {
-  'X-API-KEY': 'your_api_key_here',
-  'Content-Type': 'application/json',
-};
+const execAsync = promisify(exec);
 
 export class CoursesService {
   async getCourses(): Promise<Course[]> {
@@ -50,45 +53,54 @@ export class CoursesService {
 
   private async fetchCurriculum(courseId: string, coursetitle: string) {
     try {
-      console.log(`[Gemini API] Fetching curriculum for "${coursetitle}" from http://localhost:8000/gemini/learning-path...`);
-      const response = await fetch(
-        'http://localhost:8000/gemini/learning-path',
-        {
-          method: 'POST',
-          headers: GEMINI_HEADERS,
-          body: JSON.stringify({ topic: coursetitle }),
-        },
-      );
-
-      console.log(`[Gemini API] Received response for curriculum fetch. Status: ${response.status} ${response.statusText}`);
-
-      if (!response.ok) {
-        console.error(`[Gemini API] API error for curriculum fetch:`, { status: response.status, statusText: response.statusText });
-        throw new Error(`Gemini API error: ${response.statusText}`);
-      }
-
-      const data: any = await response.json();
-      console.log(`[Gemini API] Parsed response data for curriculum fetch:`, JSON.stringify(data).substring(0, 150) + '...');
+      console.log(`[Gemini CLI] Generating curriculum for "${coursetitle}"...`);
+      const env = await getResolvedEnv();
       
-      const rawArray: any[] =
-        data.main_subjects ??
-        data.mainsubjects ??
-        data.subjects ??
-        data.topics ??
-        [];
+      const learningPathPrompt = `You must return ONLY valid JSON.
+Do not include markdown.
+Do not include explanations.
+Do not include extra text.
+
+Return the response in this exact format:
+
+{
+  "course_title": string,
+  "main_subjects": [
+    {
+      "title": string,
+      "sub_subjects": [string]
+    }
+  ]
+}
+
+Create a detailed learning path for ${coursetitle}
+Break it into main subjects and sub subjects.`;
+
+      const { stdout } = await execAsync(`gemini run "${learningPathPrompt.replace(/"/g, '\\"')}"`, { 
+        env,
+        maxBuffer: 1024 * 1024 * 10 // 10MB
+      });
+
+      let raw = stdout.trim();
+      // Strip markdown code fences if present (e.g. ```json ... ```)
+      raw = raw.replace(/^```[a-zA-Z]*\n?/, '').replace(/```$/, '').trim();
+
+      const data = JSON.parse(raw);
+      console.log(`[Gemini CLI] Parsed curriculum data:`, JSON.stringify(data).substring(0, 150) + '...');
+      
+      const rawArray: any[] = data.main_subjects ?? [];
 
       if (!rawArray || !Array.isArray(rawArray) || rawArray.length === 0) {
-        console.warn(`[Gemini API] Warning: returned no curriculum for "${coursetitle}". Raw array was empty or invalid. Data received:`, data);
+        console.warn(`[Gemini CLI] Warning: returned no curriculum for "${coursetitle}". Raw array was empty or invalid.`);
         return;
       }
 
       const mainsubjects: MainSubject[] = rawArray.map((s: any) => ({
         title: s.title,
-        subsubjects: (s.sub_subjects ?? s.subsubjects ?? []).map(
-          (t: string | any) =>
-            typeof t === 'string'
-              ? { title: t, content: '' }
-              : { title: t.title, content: t.content ?? '' },
+        subsubjects: (s.sub_subjects ?? []).map((t: string | any) =>
+          typeof t === 'string'
+            ? { title: t, content: '' }
+            : { title: t.title, content: t.content ?? '' },
         ),
       }));
 
@@ -98,7 +110,7 @@ export class CoursesService {
       // Start generating content in background
       this.generateAllContent(courseId, coursetitle, mainsubjects);
     } catch (err) {
-      console.error(`Curriculum fetch failed for ${courseId}:`, err);
+      console.error(`Curriculum generation failed for ${courseId}:`, err);
     }
   }
 
@@ -115,46 +127,73 @@ export class CoursesService {
 
         try {
           console.log(
-            `[Gemini API] Generating content: [${mIdx + 1}/${mainsubjects.length}] "${mainSubject.title}" > "${sub.title}" from http://localhost:8000/gemini/sub-subject-content`,
+            `[Gemini CLI] Generating content: [${mIdx + 1}/${mainsubjects.length}] "${mainSubject.title}" > "${sub.title}"`,
           );
-          const res = await fetch(
-            'http://localhost:8000/gemini/sub-subject-content',
-            {
-              method: 'POST',
-              headers: GEMINI_HEADERS,
-              body: JSON.stringify({
-                topic: coursetitle,
-                main_subject: mainSubject.title,
-                sub_subject: sub.title,
-              }),
-            },
-          );
-
-          console.log(`[Gemini API] Received response for content generation. Status: ${res.status} ${res.statusText}`);
-
-          if (!res.ok) {
-            console.error(`[Gemini API] API error for content generation:`, { status: res.status, statusText: res.statusText });
-            throw new Error(`Gemini API error: ${res.statusText}`);
-          }
-
-          const data: any = await res.json();
-          console.log(`[Gemini API] Parsed response data for content:`, typeof data === 'object' ? JSON.stringify(data).substring(0, 150) + '...' : String(data).substring(0, 150));
-          if (data?.success && data?.content) {
-            const fresh = getCourseById(courseId);
-            if (
-              fresh?.mainsubjects?.[mIdx]?.subsubjects?.[sIdx] !== undefined
-            ) {
-              fresh.mainsubjects[mIdx].subsubjects[sIdx].content = data.content;
-              updateCourse(courseId, { mainsubjects: fresh.mainsubjects });
-              console.log(`Content saved: "${sub.title}"`);
-            }
-          }
+          
+          await this.generateSubSubjectContentInternal(courseId, coursetitle, mainSubject.title, sub.title, mIdx, sIdx);
         } catch (err) {
           console.error(`Content gen failed for "${sub.title}":`, err);
         }
       }
     }
     console.log(`All content generation complete for course ${courseId}`);
+  }
+
+  private async generateSubSubjectContentInternal(
+    courseId: string,
+    coursetitle: string,
+    mainSubjectTitle: string,
+    subSubjectTitle: string,
+    mIdx: number,
+    sIdx: number
+  ) {
+    const env = await getResolvedEnv();
+    const contentPrompt = `
+Write a complete structured lesson for:
+
+Topic: ${coursetitle}
+Main Subject: ${mainSubjectTitle}
+Sub Subject: ${subSubjectTitle}
+
+Structure the response like this:
+
+# ${subSubjectTitle}
+
+## Overview
+Clear explanation.
+
+## Key Concepts
+Bullet points.
+
+## Detailed Explanation
+In-depth explanation.
+
+## Examples
+Include practical examples. 
+STRICT RULE: Add code or pseudo-code ONLY if the Topic, Main Subject, or Sub Subject is strictly related to programming. If the topic is not related to programming, DO NOT include any code or pseudo-code in the examples or anywhere else in the lesson.
+
+## Practice Exercises
+Add 3–5 exercises.
+
+Do NOT return JSON.
+Do NOT include extra commentary.
+Just return the lesson content.
+`;
+
+    const { stdout } = await execAsync(`gemini run "${contentPrompt.replace(/"/g, '\\"')}"`, { 
+      env,
+      maxBuffer: 1024 * 1024 * 10 // 10MB
+    });
+
+    const content = stdout.trim();
+    if (content) {
+      const fresh = getCourseById(courseId);
+      if (fresh?.mainsubjects?.[mIdx]?.subsubjects?.[sIdx] !== undefined) {
+        fresh.mainsubjects[mIdx].subsubjects[sIdx].content = content;
+        updateCourse(courseId, { mainsubjects: fresh.mainsubjects });
+        console.log(`Content saved: "${subSubjectTitle}"`);
+      }
+    }
   }
 
   async regenerateSubSubjectContent(
@@ -174,47 +213,166 @@ export class CoursesService {
 
     setImmediate(async () => {
       try {
-        console.log(`[Gemini API] Regenerating: "${mainSubject.title}" > "${sub.title}" from http://localhost:8000/gemini/sub-subject-content`);
-        const res = await fetch(
-          'http://localhost:8000/gemini/sub-subject-content',
-          {
-            method: 'POST',
-            headers: GEMINI_HEADERS,
-            body: JSON.stringify({
-              topic: course.coursetitle,
-              main_subject: mainSubject.title,
-              sub_subject: sub.title,
-            }),
-          },
+        console.log(`[Gemini CLI] Regenerating: "${mainSubject.title}" > "${sub.title}"`);
+        await this.generateSubSubjectContentInternal(
+          courseId, 
+          course.coursetitle, 
+          mainSubject.title, 
+          sub.title, 
+          mainIdx, 
+          subIdx
         );
-
-        console.log(`[Gemini API] Received response for regeneration. Status: ${res.status} ${res.statusText}`);
-
-        if (!res.ok) {
-          console.error(`[Gemini API] API error for regeneration:`, { status: res.status, statusText: res.statusText });
-          throw new Error(`API error: ${res.statusText}`);
-        }
-        
-        const data: any = await res.json();
-        console.log(`[Gemini API] Parsed response data for regeneration:`, typeof data === 'object' ? JSON.stringify(data).substring(0, 150) + '...' : String(data).substring(0, 150));
-
-        if (data?.success && data?.content) {
-          const fresh = getCourseById(courseId);
-          if (
-            fresh?.mainsubjects?.[mainIdx]?.subsubjects?.[subIdx] !== undefined
-          ) {
-            fresh.mainsubjects[mainIdx].subsubjects[subIdx].content =
-              data.content;
-            updateCourse(courseId, { mainsubjects: fresh.mainsubjects });
-            console.log(`Regeneration done: "${sub.title}"`);
-          }
-        }
       } catch (err) {
         console.error(`Regeneration failed for "${sub.title}":`, err);
       }
     });
 
     return { message: `Regenerating content for "${sub.title}"` };
+  }
+
+  async addComment(
+    courseId: string,
+    mainIdx: number,
+    subIdx: number,
+    text: string,
+  ): Promise<Comment> {
+    const course = getCourseById(courseId);
+    if (!course) throw new Error('Course not found');
+
+    const sub = course.mainsubjects?.[mainIdx]?.subsubjects?.[subIdx];
+    if (!sub) throw new Error('Sub-subject not found');
+
+    const userComment: Comment = {
+      id: crypto.randomUUID(),
+      text,
+      author: 'user',
+      timestamp: Date.now(),
+    };
+
+    if (!sub.comments) sub.comments = [];
+    sub.comments.push(userComment);
+    updateCourse(courseId, { mainsubjects: course.mainsubjects });
+
+    // Generate AI response in background
+    setImmediate(() => {
+      this.generateCommentResponse(
+        courseId,
+        mainIdx,
+        subIdx,
+        text,
+        course.coursetitle,
+        sub.title,
+        sub.content,
+      );
+    });
+
+    return userComment;
+  }
+
+  private async generateCommentResponse(
+    courseId: string,
+    mainIdx: number,
+    subIdx: number,
+    userQuestion: string,
+    courseTitle: string,
+    subSubjectTitle: string,
+    subSubjectContent?: string,
+  ) {
+    try {
+      const env = await getResolvedEnv();
+      const prompt = `
+You are an expert tutor answering a student's question about a specific topic in a course.
+
+Course: ${courseTitle}
+Topic: ${subSubjectTitle}
+Lesson Content for Context:
+${subSubjectContent || 'No specific lesson content provided.'}
+
+Student Question: ${userQuestion}
+
+Provide a helpful, clear, and accurate answer to the student's question based on the Lesson Content and course context.
+Use Markdown formatting for your answer.
+
+CRITICAL: Provide ONLY the direct answer. Do not include any internal reasoning, search plans, or meta-talk about how you are generating the answer.
+`;
+
+      const { stdout } = await execAsync(`gemini run "${prompt.replace(/"/g, '\\"')}"`, { 
+        env,
+        maxBuffer: 1024 * 1024 * 10 // 10MB
+      });
+
+      const aiText = stdout.trim();
+      if (aiText) {
+        const fresh = getCourseById(courseId);
+        const sub = fresh?.mainsubjects?.[mainIdx]?.subsubjects?.[subIdx];
+        if (sub) {
+          const aiComment: Comment = {
+            id: crypto.randomUUID(),
+            text: aiText,
+            author: 'ai',
+            timestamp: Date.now(),
+          };
+          if (!sub.comments) sub.comments = [];
+          sub.comments.push(aiComment);
+          updateCourse(courseId, { mainsubjects: fresh!.mainsubjects });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate AI comment response:', err);
+    }
+  }
+
+  async addMainSubject(courseId: string, title: string): Promise<MainSubject> {
+    const course = getCourseById(courseId);
+    if (!course) throw new Error('Course not found');
+
+    const newMain: MainSubject = {
+      title,
+      subsubjects: [],
+    };
+
+    if (!course.mainsubjects) course.mainsubjects = [];
+    course.mainsubjects.push(newMain);
+    updateCourse(courseId, { mainsubjects: course.mainsubjects });
+
+    return newMain;
+  }
+
+  async addSubSubject(
+    courseId: string,
+    mainIdx: number,
+    title: string,
+  ): Promise<SubSubject> {
+    const course = getCourseById(courseId);
+    if (!course) throw new Error('Course not found');
+
+    const mainSubject = course.mainsubjects?.[mainIdx];
+    if (!mainSubject) throw new Error('Main subject not found');
+
+    const newSub: SubSubject = {
+      title,
+      content: '',
+    };
+
+    if (!mainSubject.subsubjects) mainSubject.subsubjects = [];
+    mainSubject.subsubjects.push(newSub);
+    const subIdx = mainSubject.subsubjects.length - 1;
+
+    updateCourse(courseId, { mainsubjects: course.mainsubjects });
+
+    // Trigger content generation in background
+    setImmediate(() => {
+      this.generateSubSubjectContentInternal(
+        courseId,
+        course.coursetitle,
+        mainSubject.title,
+        title,
+        mainIdx,
+        subIdx,
+      );
+    });
+
+    return newSub;
   }
 }
 
