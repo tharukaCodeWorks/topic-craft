@@ -65,6 +65,11 @@ const electronHandler = {
     checkInstallation: () => ipcRenderer.invoke('cli:checkInstallation'),
     checkAuth: () => ipcRenderer.invoke('cli:checkAuth'),
   },
+  settings: {
+    getSettings: () => ipcRenderer.invoke('settings:getSettings'),
+    updateSettings: (overrides: any) =>
+      ipcRenderer.invoke('settings:updateSettings', overrides),
+  },
 };
 
 contextBridge.exposeInMainWorld('electron', electronHandler);

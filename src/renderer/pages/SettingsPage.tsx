@@ -10,12 +10,21 @@ interface CliStatus {
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('prerequisites');
+  const [generationLanguage, setGenerationLanguage] = useState('English');
   const [cliStatus, setCliStatus] = useState<CliStatus>({
     nodeInstalled: null,
     installed: null,
     signedIn: null,
     loading: true,
   });
+
+  useEffect(() => {
+    window.electron.settings.getSettings().then((settings: any) => {
+      if (settings?.generationLanguage) {
+        setGenerationLanguage(settings.generationLanguage);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -59,6 +68,13 @@ export default function SettingsPage() {
             onClick={() => setActiveTab('prerequisites')}
           >
             Prerequisites
+          </button>
+          <button
+            type="button"
+            className={`settings-nav-tab ${activeTab === 'preferences' ? 'active' : ''}`}
+            onClick={() => setActiveTab('preferences')}
+          >
+            Preferences
           </button>
           <button
             type="button"
@@ -241,6 +257,60 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'preferences' && (
+          <div className="settings-tab-pane">
+            <h2>Preferences</h2>
+            <p className="settings-tab-description">
+              Customize how Topic Craft generates your content.
+            </p>
+
+            <div className="settings-checklist">
+              <div className="settings-checklist-item" style={{ border: 'none', background: 'transparent' }}>
+                <div className="settings-item-content" style={{ width: '100%' }}>
+                  <h3>Generation Language</h3>
+                  <p>Select the language you want to use for generated course content.</p>
+                  <select
+                    value={generationLanguage}
+                    onChange={(e) => {
+                      setGenerationLanguage(e.target.value);
+                      window.electron.settings.updateSettings({
+                        generationLanguage: e.target.value,
+                      });
+                    }}
+                    className="settings-select"
+                    style={{
+                      marginTop: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#fff',
+                      fontSize: '14px',
+                      width: '200px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="English">English</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="French">French</option>
+                    <option value="German">German</option>
+                    <option value="Chinese">Chinese</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Korean">Korean</option>
+                    <option value="Italian">Italian</option>
+                    <option value="Portuguese">Portuguese</option>
+                    <option value="Russian">Russian</option>
+                    <option value="Arabic">Arabic</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="Sinhala">Sinhala</option>
+                    <option value="Tamil">Tamil</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

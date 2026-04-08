@@ -13,6 +13,7 @@ import {
   MainSubject,
   SubSubject,
   Comment,
+  readSettings,
 } from '../store';
 
 const execAsync = promisify(exec);
@@ -55,6 +56,7 @@ export class CoursesService {
     try {
       console.log(`[Gemini CLI] Generating curriculum for "${coursetitle}"...`);
       const env = await getResolvedEnv();
+      const settings = readSettings();
       
       const learningPathPrompt = `You must return ONLY valid JSON.
 Do not include markdown.
@@ -74,7 +76,8 @@ Return the response in this exact format:
 }
 
 Create a detailed learning path for ${coursetitle}
-Break it into main subjects and sub subjects.`;
+Break it into main subjects and sub subjects.
+STRICT INSTRUCTION: Generate all content strictly in ${settings.generationLanguage} language.`;
 
       const { stdout } = await execAsync(`gemini run "${learningPathPrompt.replace(/"/g, '\\"')}"`, { 
         env,
@@ -148,12 +151,15 @@ Break it into main subjects and sub subjects.`;
     sIdx: number
   ) {
     const env = await getResolvedEnv();
+    const settings = readSettings();
     const contentPrompt = `
 Write a complete structured lesson for:
 
 Topic: ${coursetitle}
 Main Subject: ${mainSubjectTitle}
 Sub Subject: ${subSubjectTitle}
+
+STRICT INSTRUCTION: Generate all content strictly in ${settings.generationLanguage} language.
 
 Structure the response like this:
 
@@ -280,6 +286,7 @@ Just return the lesson content.
   ) {
     try {
       const env = await getResolvedEnv();
+      const settings = readSettings();
       const prompt = `
 You are an expert tutor answering a student's question about a specific topic in a course.
 
@@ -292,6 +299,8 @@ Student Question: ${userQuestion}
 
 Provide a helpful, clear, and accurate answer to the student's question based on the Lesson Content and course context.
 Use Markdown formatting for your answer.
+
+STRICT INSTRUCTION: Generate all content strictly in ${settings.generationLanguage} language.
 
 CRITICAL: Provide ONLY the direct answer. Do not include any internal reasoning, search plans, or meta-talk about how you are generating the answer.
 `;

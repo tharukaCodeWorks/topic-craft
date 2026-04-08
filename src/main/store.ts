@@ -26,6 +26,10 @@ export interface Course {
   mainsubjects: MainSubject[];
 }
 
+export interface Settings {
+  generationLanguage: string;
+}
+
 const getStorePath = () => path.join(app.getPath('userData'), 'courses.json');
 
 export const readCourses = (): Course[] => {
@@ -67,4 +71,29 @@ export const updateCourse = (
   courses[index] = { ...courses[index], ...updates };
   writeCourses(courses);
   return courses[index];
+};
+
+const getSettingsPath = () => path.join(app.getPath('userData'), 'settings.json');
+
+export const readSettings = (): Settings => {
+  try {
+    const dataPath = getSettingsPath();
+    if (!fs.existsSync(dataPath)) {
+      return { generationLanguage: 'English' };
+    }
+    const data = fs.readFileSync(dataPath, 'utf-8');
+    return JSON.parse(data);
+  } catch (err) {
+    console.error('Failed to read settings from local store:', err);
+    return { generationLanguage: 'English' };
+  }
+};
+
+export const writeSettings = (settings: Settings): void => {
+  try {
+    const dataPath = getSettingsPath();
+    fs.writeFileSync(dataPath, JSON.stringify(settings, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to write settings to local store:', err);
+  }
 };

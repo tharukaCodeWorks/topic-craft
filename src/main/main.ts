@@ -17,6 +17,7 @@ import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import { coursesService } from './services/courses';
 import { cliService } from './services/cli';
+import { readSettings, writeSettings } from './store';
 
 app.setName('TopicCraft');
 
@@ -127,6 +128,14 @@ ipcMain.handle('courses:addSubSubject', (_event, courseId, mainIdx, title) =>
 ipcMain.handle('cli:checkNode', () => cliService.checkNodeInstallation());
 ipcMain.handle('cli:checkInstallation', () => cliService.checkInstallation());
 ipcMain.handle('cli:checkAuth', () => cliService.checkAuth());
+
+ipcMain.handle('settings:getSettings', () => readSettings());
+ipcMain.handle('settings:updateSettings', (_event, overrides) => {
+  const current = readSettings();
+  const next = { ...current, ...overrides };
+  writeSettings(next);
+  return next;
+});
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
